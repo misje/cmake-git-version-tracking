@@ -1,53 +1,82 @@
-[![Build Status](https://travis-ci.com/andrew-hardin/cmake-git-version-tracking.svg?branch=master)](https://travis-ci.com/andrew-hardin/cmake-git-version-tracking)
 # Embed Git metadata in C/C++ project
-This is a demo project that shows how to embed up-to-date
-git metadata in a C/C++ project via CMake. The entire
-capability is baked into single self-contained
-[script](git_watcher.cmake).
 
-## "The proof of the pudding is in the eating!"
-In other words, please clone the repository and [try out the demo](hello-world/README.md).
+This project is loosely based on [Andrew Hardin's work][1]. Check the project's
+README for details. This fork differs in the following ways:
 
-## A "why does this matter" use case
-We're continuously shipping prebuilt binaries for an
-application. A user discovers a bug and files a bug report.
-By embedding up-to-date versioning information, the user
-can include this in their report, e.g.:
+- Most of the logic, including the state using a hash of all the variables, is
+  removed. I could not get the project to rebuild when needed, for instance
+  when the input file was modified or a corresponding header file. This
+  implementation simply runs `configure_file` on each invocation, which doesn't
+  result in a modified output file unless the substitution variables change.
+- A completely different approach has been taken to the default variables.
+  Personally I have never had a need for commit details like author, e-mail or
+  subject. Instead of using `git status`, `git describe` is used to parse the
+  current or latest _git tag_. The tag is expected to follow semantic
+  versioning and its individual version numbers are extracted into
+  corresponding variables. As a fallback the shortened SHA is used.
 
-```
-Commit SHA1: 46a396e (46a396e6c1eb3d)
-Dirty: false (there were no uncommitted changes at time of build)
-```
+Due to the limited regular expression engine in CMake (why do they implement
+their own?) Perl is used to parse the output of git. Hence **perl** is needed.
 
-This allows us to investigate the _precise_ version of the
-application that the bug was reported in.
+## Tag format
 
-## Wait, doesn't this already exist?
-Well, it depends on your specific requirements. Before writing this, I
-searched far and wide for existing solutions. Each solution I found fell
-into one of two categories:
+- An optional "v"
+- Major version number
+- Minor version number
+- Optional patch version number
+- Optional extra characters other than "-"
+- Optional deb revision number
 
-- Write the commit ID to the header at configure time (e.g. `cmake <source_dir>`).
-  This works well for automated build processes (e.g. check-in code and build artifacts).
-  However, it has one weakness: any changes made after running `cmake`
-  (e.g. `git commit -am "Changed X"`) aren't reflected in the header.
+### Examples:
 
-- Every time a build is started (e.g. `make`), write the commit ID to a header.
-  While this was better than the above, it had one major drawback:
-  any object file that includes the new header will be recompiled -- _even if the state
-  of the git repo hasn't changed_.
+- v1.2.3
+- v1.2
+- 0.1.0
+- 0.1
+- v2.4.0+rc1-3
+- 5.0.0alpha-1
 
-## So what's the ideal solution?
-We check Git every time a build is started (e.g. `make`) to see if anything has changed,
-like a new commit to the current branch. If nothing has changed, then we don't
-touch anything- _no recompiling or linking is triggered_. If something has changed, then we
-reconfigure the header and CMake rebuilds any downstream dependencies.
+In the examples above the last number after the hyphen, if present, is the deb
+revision. "+rc1" and "alpha" is referred to as "extra" in the following
+sections.
 
-## Tip: how to avoid unnecessary recompilations
-If you're worried about lengthy recompilations, then **don't** place the
-versioning information in a header that is then included in _every_ source
-file. Doing so would defeat the purpose of partial rebuilds.
+## Variables
 
-The [better example](better-example/README.md) demonstrates one approach
-for solving the partial recompilation problem by moving the git metadata
-from a header into a source file.
+`git describe` provides the following information if HEAD is not the same as
+the last tag:
+
+- Number of commits since last tag
+- The SHA of the last commit
+
+With `--dirty` the command also outputs whether working tree is "dirty". All
+three fields are captured, if present, into variables.
+
+Variables have a default value of either an empty string or the integer -1.
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| GIT\_TAG\_VERSION\_FULL | string | | major.minor(.patch) |
+| GIT\_TAG\_VERSION\_FULL\_EXTRA | string | | As above but with any additional characters before deb revision, or empty |
+| GIT\_TAG\_VERSION\_MAJOR | int | -1 | Major version number from tag |
+| GIT\_TAG\_VERSION\_MINOR | int | -1 | Minor version number from tag |
+| GIT\_TAG\_VERSION\_PATCH | int | -1 | Patch version number from tag |
+| GIT\_TAG\_VERSION\_EXTRA | string | | Any text between sem.ver. and deb revision number |
+| GIT\_TAG\_VERSION\_REVISION | int | -1 | deb revision number |
+| GIT\_TAG\_VERSION\_COMMITS | int | -1 | Number of commits since last tag |
+| GIT\_TAG\_VERSION\_SHA | string | | SHA of last commit or empty if last commit is a tag |
+| GIT\_TAG\_VERSION\_DIRTY | int | | 1 if working tree is dirty, otherwise 0 |
+| GIT\_TAG\_VERSION\_ANY | string | | If current commit is a tag, major.min(.patch), otherwise SHA |
+
+## Usage
+
+Look at the [original project][1] for examples. This version is used in a
+similar way, except it doesn't make sense to use unless tagged version numbers
+are used.
+
+## Acknowledgments 
+
+I'd like to thank Andrew Hardin for his work. The original project wasn't a
+perfect fit for my use case, but I found it very helpful. I have published my
+heavily modified version in case is it useful for anyone else.
+
+[1]: https://github.com/andrew-hardin/cmake-git-version-tracking
