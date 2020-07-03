@@ -23,24 +23,31 @@ use strict;
 use utf8;
     
 chomp(my $gitDescription = qx(git describe --always --dirty));
-$gitDescription =~ /
+#$gitDescription = join ' ', @ARGV;
+
+unless ($gitDescription =~ /
 \A
-v?                                     # Optional "version v"
-(?<full_extra>                         # Capture everything before deb revision
-(?<full>                               # ↑, except the "extra part
-(?<major>\d+)                          # Major
-\.                                     # Period separator
-(?<minor>\d+)                          # Minor
-(?:\.(?<patch>\d+))?                   # Optional period separator and patch
+(?:
+v?                                          # Optional "version v"
+(?<full_extra>                              # Capture everything before deb revision
+(?<full>                                    # ↑, except the "extra part"
+(?<major>\d+)                               # Major
+\.                                          # Period separator
+(?<minor>\d+)                               # Minor
+(?:\.(?<patch>\d+))?                        # Optional period separator and patch
 )
-(?<extra>[^-]+)?                       # Any text other than "-"
+(?<extra>[^-]+)?                            # Any text other than "-"
 )
-(?:-(?<revision>\d+)(?!-g[0-9af]+))?   # Optional Debian revision
-(?:-(?<commits>\d+)                    # Optional commit count
--g(?<sha>[0-9a-f]+))?                  # Optinal git SHA hash
-|                                      # … or
-(?<sha>[0-9a-f]+)                      # Just the git SHA hash
-/x;
+(?:-(?<revision>\d+)(?!\d*-g[0-9a-f]{4,}))? # Optional Debian revision
+(?:-(?<commits>\d+)                         # Optional commit count
+-g(?<sha>[0-9a-f]{4,}))?                    # Optinal git SHA hash
+|                                           # … or
+(?<sha>[0-9a-f]{4,})                        # Just the git SHA hash
+)(?:-dirty)?
+\Z
+/x) {
+	die "The git tag '$gitDescription' does not appear to be a version string\n";
+}
 
 # Print matched group by name, uppercase, prefixed by GIT_TAG_VERSION_:
 print "GIT_TAG_VERSION_", uc $_, "=$+{$_}\n" for keys %+;
